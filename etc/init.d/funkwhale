@@ -1,0 +1,225 @@
+#!/usr/bin/env /lib/init/init-d-script
+### BEGIN INIT INFO
+# Provides:           funkwhalebeat
+# Required-Start:     $remote_fs $network
+# Required-Stop:      $remote_fs $network
+# Default-Start:      2 3 4 5
+# Default-Stop:       0 1 6
+# Short-Description:  funkwhale beat
+# Description:        Task beat (this is for recurring tasks)
+### END INIT INFO
+
+# Author: nubjub <nubjub@github.com>
+
+# Do NOT "set -e"
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH=/srv/funkwhale/.local/bin:/sbin:/usr/sbin:/bin:/usr/bin
+export PATH
+DESC="Funkwhale celery beat process"
+USER="funkwhale"
+NAME="$USER-beat"
+PIDFILE="/var/run/$NAME.pid"
+LOGFILE="/var/log/$USER/$NAME.log"
+ROOTDIR="/srv/$USER"
+WORKDIR="$ROOTDIR/api"
+DAEMON="$ROOTDIR/virtualenv/bin/celery"
+SCRIPTNAME="/etc/init.d/$NAME"
+DAEMON_ARGS="--app funkwhale_api.taskapp beat --loglevel INFO"
+
+# Read configuration variable file if it is present
+[ -r /etc/default/$USER ] && . /etc/default/$USER
+
+START_ARGS=""
+
+# Exit if the package is not installed
+[ -x "$DAEMON" ] || exit 0
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.2-14) to ensure that this file is present
+# and status_of_proc is working.
+. /lib/lsb/init-functions
+
+is_call_implemented() {
+	command -V $1 > /dev/null 2>&1
+}
+
+do_usage() {
+	if is_call_implemented do_reload ; then
+		echo "Usage: $SCRIPTNAME {start|stop|restart}" >&2
+	else
+		echo "Usage: $SCRIPTNAME {start|stop|restart}" >&2
+	fi
+}
+
+call() {
+	cmd="$1"
+	shift
+	if is_call_implemented ${cmd}_override ; then
+		${cmd}_override "$@"
+	else
+		${cmd} "$@"
+	fi
+}
+
+#
+# Function that starts the daemon/service
+#
+
+# Return
+#   0 if daemon has been started
+#   1 if daemon was already running
+#   2 if daemon could not be started
+do_start_cmd() {
+	start-stop-daemon --start --chuid $USER --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
+		$START_ARGS \
+		--startas $DAEMON --name $NAME --exec $DAEMON --test > /dev/null \
+		|| return 1
+	start-stop-daemon --start --chuid $USER --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
+		$START_ARGS \
+		--startas $DAEMON --name $NAME --exec $DAEMON -- $DAEMON_ARGS \
+		|| return 2
+	# Add code here, if necessary, that waits for the process to be ready
+	# to handle requests from services started subsequently which depend
+	# on this one.  As a last resort, sleep for some time.
+}
+
+do_start()
+{
+	if is_call_implemented do_start_prepare ; then
+		call do_start_prepare
+	fi
+	[ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
+	call do_start_cmd
+	case "$?" in
+		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
+	if is_call_implemented do_start_cleanup ; then
+		call do_start_cleanup
+	fi
+}
+
+#
+# Function that stops the daemon/service
+#
+
+# Return
+#   0 if daemon has been stopped
+#   1 if daemon was already stopped
+#   2 if daemon could not be stopped
+#   other if a failure occurred
+do_stop_cmd() {
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 \
+		$STOP_ARGS \
+		${PIDFILE:+--pidfile ${PIDFILE}} --name $NAME --exec $DAEMON
+	RETVAL="$?"
+	[ "$RETVAL" = 2 ] && return 2
+	# Wait for children to finish too if this is a daemon that forks
+	# and if the daemon is only ever run from this initscript.
+	# If the above conditions are not satisfied then add some other code
+	# that waits for the process to drop all resources that could be
+	# needed by services started subsequently.  A last resort is to
+	# sleep for some time.
+	start-stop-daemon --stop --quiet --oknodo --retry=0/30/KILL/5 \
+		$STOP_ARGS \
+		--exec $DAEMON
+	[ "$?" = 2 ] && return 2
+	# Many daemons don't delete their pidfiles when they exit.
+	rm -f $PIDFILE
+	return $RETVAL
+}
+
+do_stop()
+{
+	if is_call_implemented do_stop_prepare ; then
+		call do_stop_prepare
+	fi
+	[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+	call do_stop_cmd
+	case "$?" in
+		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
+	if is_call_implemented do_stop_cleanup ; then
+		call do_stop_cleanup
+	fi
+}
+
+do_restart() {
+	[ "$VERBOSE" != no ] && log_daemon_msg "Restarting $DESC" "$NAME"
+	call do_stop_cmd
+	call do_start_cmd
+	case "$?" in
+		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
+}
+
+if [ "$DEBUG" = "true" ] ; then
+	set -x
+fi
+
+SCRIPTNAME=$1
+scriptbasename="$(basename $1)"
+if [ "$scriptbasename" != "init-d-script" ] ; then
+	script="$1"
+	shift
+	. $script
+else
+		exit 0
+fi
+
+NAME=${NAME:=$(basename $DAEMON)}
+DESC=${DESC:=$NAME}
+
+# Do not use pid file if $PIDFILE is 'none'.  Otherwise, generate from
+# $NAME or use the value provided by the init.d script.
+if [ none = "$PIDFILE" ] ; then
+	PIDFILE=
+elif [ -z "$PIDFILE" ] ; then
+	PIDFILE=/var/run/$NAME.pid
+fi
+
+# Exit if the package is not installed
+if [ none != "$DAEMON" ] && [ ! -x "$DAEMON" ] ; then
+	exit 0
+fi
+
+# Read configuration variable file if it is present
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+if [ -t 0 ] ; then # Be verbose when called from a terminal
+	VERBOSE=yes
+fi
+
+case "$1" in
+	start)
+		call do_start
+		;;
+	stop)
+		call do_stop
+		;;
+	restart)
+		call do_restart
+		;;
+	'')
+		call do_usage
+		exit 3
+		;;
+	*)
+		if is_call_implemented do_unknown ; then
+			call do_unknown "$1"
+			exit 3
+		else
+			call do_usage
+			exit 3
+		fi
+		;;
+esac
+exit $? # See https://bugs.debian.org/822753#53
