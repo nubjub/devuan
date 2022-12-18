@@ -20,7 +20,8 @@ DESC="Funkwhale celery beat process"
 USER="funkwhale"
 NAME="$USER-beat"
 PIDFILE="/var/run/$NAME.pid"
-LOGFILE="/var/log/$USER/$NAME.log"
+LOGDIR="/var/log/$USER"
+LOGFILE="$LOGDIR/$NAME.log"
 ROOTDIR="/srv/$USER"
 WORKDIR="$ROOTDIR/api"
 DAEMON="$ROOTDIR/virtualenv/bin/celery"
@@ -29,8 +30,6 @@ DAEMON_ARGS="--app funkwhale_api.taskapp beat --loglevel INFO"
 
 # Read configuration variable file if it is present
 [ -r /etc/default/$USER ] && . /etc/default/$USER
-
-START_ARGS=""
 
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
@@ -65,20 +64,26 @@ call() {
 	fi
 }
 
+START_ARGS="--chuid $USER --chdir $WORKDIR --background --output $LOGFILE"
 #
 # Function that starts the daemon/service
 #
-
+do_start_prepar() {
+	if [ ! -d $LOGDIR ]; then
+		mkdir -p $LOGDIR
+		chown -R $USER: $LOGDIR
+	fi
+}
 # Return
 #   0 if daemon has been started
 #   1 if daemon was already running
 #   2 if daemon could not be started
 do_start_cmd() {
-	start-stop-daemon --start --chuid $USER --chdir $WORKDIR --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
+	start-stop-daemon --start --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
 		$START_ARGS \
 		--startas $DAEMON --name $NAME --exec $DAEMON --test > /dev/null \
 		|| return 1
-	start-stop-daemon --start --chuid $USER --chdir $WORKDIR --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
+	start-stop-daemon --start --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
 		$START_ARGS \
 		--startas $DAEMON --name $NAME --exec $DAEMON -- $DAEMON_ARGS \
 		|| return 2
