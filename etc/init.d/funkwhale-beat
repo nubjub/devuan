@@ -74,11 +74,11 @@ call() {
 #   1 if daemon was already running
 #   2 if daemon could not be started
 do_start_cmd() {
-	start-stop-daemon --start --chuid $USER --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
+	start-stop-daemon --start --chuid $USER --chdir $WORKDIR --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
 		$START_ARGS \
 		--startas $DAEMON --name $NAME --exec $DAEMON --test > /dev/null \
 		|| return 1
-	start-stop-daemon --start --chuid $USER --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
+	start-stop-daemon --start --chuid $USER --chdir $WORKDIR --quiet ${PIDFILE:+--pidfile ${PIDFILE}} \
 		$START_ARGS \
 		--startas $DAEMON --name $NAME --exec $DAEMON -- $DAEMON_ARGS \
 		|| return 2
