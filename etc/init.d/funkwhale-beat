@@ -168,16 +168,6 @@ if [ "$DEBUG" = "true" ] ; then
 	set -x
 fi
 
-SCRIPTNAME=$1
-scriptbasename="$(basename $1)"
-if [ "$scriptbasename" != "init-d-script" ] ; then
-	script="$1"
-	shift
-	. $script
-else
-		exit 0
-fi
-
 NAME=${NAME:=$(basename $DAEMON)}
 DESC=${DESC:=$NAME}
 
